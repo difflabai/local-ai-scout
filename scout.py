@@ -32,41 +32,7 @@ from config import (
     LLM_MODEL, MAX_TOKENS, SCOUT_FOCUS,
 )
 from prompt import build_system_prompt
-
-
-# ─── TOPIC QUERIES ───────────────────────────────────────────────────────────
-
-def build_topic_queries(topic: str) -> list[str]:
-    """Build X search queries from a freeform topic string.
-
-    Extracts key terms and builds broad + specific queries so the
-    X API returns relevant tweets.
-    """
-    # Split topic into searchable terms/phrases
-    # e.g. "image generation models including SDXL, PonyXL" → keywords
-    words = [w.strip().rstrip(",") for w in topic.split() if len(w.strip().rstrip(",")) > 2]
-    # Filter out filler words
-    filler = {"and", "the", "for", "with", "including", "models", "model", "such", "like", "also"}
-    keywords = [w for w in words if w.lower() not in filler]
-
-    queries = []
-    # Build OR query from all keywords (broad sweep)
-    if keywords:
-        or_terms = " OR ".join(f'"{k}"' for k in keywords[:8])
-        queries.append(f'({or_terms}) -is:retweet')
-
-    # Narrower: keywords + signal words
-    if len(keywords) >= 2:
-        top = " OR ".join(f'"{k}"' for k in keywords[:4])
-        queries.append(
-            f'({top}) ("release" OR "new" OR "benchmark" OR "update" OR "community") -is:retweet'
-        )
-
-    # If we got nothing useful, fall back to quoting the whole topic
-    if not queries:
-        queries.append(f'"{topic}" -is:retweet')
-
-    return queries
+from queries import build_topic_queries
 
 
 # ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -121,6 +87,26 @@ def search_tweets(query: str, start_time: str, bearer_token: str) -> dict:
         return {"error": str(e), "query": query}
 
 
+def _enrich_with_tweet_urls(result: dict) -> dict:
+    """Add tweet_url field to each tweet in the result.
+
+    Constructs https://x.com/{username}/status/{tweet_id} using
+    the includes.users expansion data.
+    """
+    # Build author_id → username lookup
+    users = result.get("includes", {}).get("users", [])
+    author_map = {u["id"]: u["username"] for u in users}
+
+    for tweet in result.get("data", []):
+        tweet_id = tweet.get("id", "")
+        author_id = tweet.get("author_id", "")
+        username = author_map.get(author_id, "unknown")
+        tweet["tweet_url"] = f"https://x.com/{username}/status/{tweet_id}"
+        tweet["author_username"] = username
+
+    return result
+
+
 def pull_tweets(bearer_token: str, queries: list[str]) -> dict:
     start_time = (
         datetime.now(timezone.utc) - timedelta(hours=LOOKBACK_HOURS)
@@ -135,6 +121,7 @@ def pull_tweets(bearer_token: str, queries: list[str]) -> dict:
     for i, query in enumerate(queries, 1):
         print(f"  [{i}/{len(queries)}] {query[:60]}...", file=sys.stderr)
         result = search_tweets(query, start_time, bearer_token)
+        result = _enrich_with_tweet_urls(result)
         all_results["queries"].append({
             "query": query,
             "result_count": result.get("meta", {}).get("result_count", 0),
@@ -172,7 +159,7 @@ def generate_brief(tweets_json: str, system_prompt: str) -> str:
     print("  🧠 Generating brief...", file=sys.stderr)
 
     try:
-        with urlopen(req) as resp:
+        with urlopen(req, timeout=120) as resp:
             data = json.loads(resp.read().decode())
             return data["choices"][0]["message"]["content"]
     except Exception as e:
@@ -191,6 +178,10 @@ def main():
         "--topic", default="",
         help="Topic/domain to scout (default: local AI). Also via SCOUT_FOCUS env var",
     )
+    parser.add_argument(
+        "--queries", nargs="+", default=None,
+        help="Raw X API query strings (bypass query builder entirely)",
+    )
     args = parser.parse_args()
 
     # Resolve topic: CLI --topic > SCOUT_FOCUS env var > default
@@ -198,9 +189,16 @@ def main():
     if topic:
         print(f"🎯 Focus: {topic}", file=sys.stderr)
         system_prompt = build_system_prompt(topic=topic, topic_description=topic)
-        queries = build_topic_queries(topic)
     else:
         system_prompt = build_system_prompt()
+
+    # Resolve queries: --queries flag > topic builder > defaults
+    if args.queries:
+        queries = args.queries
+        print(f"🔎 Using {len(queries)} raw quer{'y' if len(queries)==1 else 'ies'}", file=sys.stderr)
+    elif topic:
+        queries = build_topic_queries(topic)
+    else:
         queries = DEFAULT_QUERIES
 
     # Step 1: Get tweets

@@ -46,26 +46,32 @@ When given X API search results (JSON), follow these steps:
 ## New This Cycle
 
 ### 🚀 Releases
-- **[Model/Tool Name]** by @[author] — [one-line summary]. [Link]
+- **[Model/Tool Name]** by @[author] — [one-line summary]. [tweet link]
   - Why it matters: [one sentence]
 
 ### 📊 Benchmarks & Data
-- [same format]
+- [same format — always include tweet link]
 
 ### 🔧 Techniques
-- [same format]
+- [same format — always include tweet link]
 
 ### 📡 Ecosystem
-- [same format]
+- [same format — always include tweet link]
 
 ## 💬 Notable Voices
-- @[handle]: "[key quote or paraphrase]" — [context]
+- @[handle]: "[key quote or paraphrase]" — [context] [tweet link]
 
 ## 📈 Trend Watch
 [2-3 sentences on patterns across this batch]
 
 ## 🗑️ Filtered Out
 [Count] tweets dropped (spam/duplicates/off-topic)
+
+## Tweet Links
+
+Each tweet in the JSON data includes a `tweet_url` field with the direct link to the original tweet.
+**You MUST include the tweet link for every insight, finding, or quote.** Format as markdown: [link](url).
+This is critical — the reader needs to verify and explore each finding.
 
 ## Quality Rules
 
