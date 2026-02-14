@@ -5,9 +5,15 @@ import os
 # When set, the scout searches for this topic instead of local AI.
 SCOUT_FOCUS = os.environ.get("SCOUT_FOCUS", "")
 
-# ─── SEARCH QUERIES ───────────────────────────────────────────────────────────
-# Default queries target local AI. When SCOUT_FOCUS is set via env or CLI,
-# scout.py builds topic-specific queries automatically.
+# ─── SOURCES ─────────────────────────────────────────────────────────────────
+# Available sources: "x", "reddit"
+# Select via --source CLI arg (default: "x", or "all" for everything)
+DEFAULT_SOURCE = "x"
+
+# ─── SEARCH QUERIES (X source) ──────────────────────────────────────────────
+# Default queries target local AI on X/Twitter. When SCOUT_FOCUS is set via
+# env or CLI, scout.py builds topic-specific queries automatically.
+# These are only used by the X adapter; Reddit uses topic keywords directly.
 DEFAULT_QUERIES = [
     # Core local inference ecosystem
     '"llama.cpp" OR "llamacpp" OR "gguf" OR "mlx" OR "ollama" -is:retweet',
@@ -26,6 +32,10 @@ DEFAULT_QUERIES = [
 
 # Active queries — overridden when a custom topic generates its own queries
 QUERIES = DEFAULT_QUERIES
+
+# ─── REDDIT CONFIG ───────────────────────────────────────────────────────────
+# Subreddits to search (in addition to r/all) — configured in sources/reddit.py
+# Reddit public API allows ~10 req/min without auth
 
 # ─── TUNING ───────────────────────────────────────────────────────────────────
 
