@@ -127,8 +127,8 @@ def main():
         help="Raw X API query strings (bypass query builder entirely)",
     )
     parser.add_argument(
-        "--source", default="x", choices=["x", "reddit", "civitai", "all"],
-        help="Source to pull from: x, reddit, civitai, or all (default: x)",
+        "--source", default="x", choices=["x", "reddit", "civitai", "arxiv", "all"],
+        help="Source to pull from: x, reddit, civitai, arxiv, or all (default: x)",
     )
     args = parser.parse_args()
 
