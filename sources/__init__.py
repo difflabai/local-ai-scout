@@ -6,6 +6,7 @@ from .arxiv import ArxivAdapter
 from .lobsters import LobstersAdapter
 from .hackernews import HackerNewsAdapter
 from .github import GitHubAdapter
+from .producthunt import ProductHuntAdapter
 
 ADAPTERS = {
     "x": XAdapter,
@@ -15,6 +16,7 @@ ADAPTERS = {
     "lobsters": LobstersAdapter,
     "hackernews": HackerNewsAdapter,
     "github": GitHubAdapter,
+    "producthunt": ProductHuntAdapter,
 }
 
-__all__ = ["Post", "SourceAdapter", "XAdapter", "RedditAdapter", "CivitAIAdapter", "ArxivAdapter", "LobstersAdapter", "HackerNewsAdapter", "GitHubAdapter", "ADAPTERS"]
+__all__ = ["Post", "SourceAdapter", "XAdapter", "RedditAdapter", "CivitAIAdapter", "ArxivAdapter", "LobstersAdapter", "HackerNewsAdapter", "GitHubAdapter", "ProductHuntAdapter", "ADAPTERS"]
