@@ -7,6 +7,8 @@ from .lobsters import LobstersAdapter
 from .hackernews import HackerNewsAdapter
 from .github import GitHubAdapter
 from .producthunt import ProductHuntAdapter
+from .huggingface import HuggingFaceAdapter
+from .bluesky import BlueskyAdapter
 
 ADAPTERS = {
     "x": XAdapter,
@@ -17,6 +19,14 @@ ADAPTERS = {
     "hackernews": HackerNewsAdapter,
     "github": GitHubAdapter,
     "producthunt": ProductHuntAdapter,
+    "huggingface": HuggingFaceAdapter,
+    "bluesky": BlueskyAdapter,
 }
 
-__all__ = ["Post", "SourceAdapter", "XAdapter", "RedditAdapter", "CivitAIAdapter", "ArxivAdapter", "LobstersAdapter", "HackerNewsAdapter", "GitHubAdapter", "ProductHuntAdapter", "ADAPTERS"]
+__all__ = [
+    "Post", "SourceAdapter", "ADAPTERS",
+    "XAdapter", "RedditAdapter", "CivitAIAdapter",
+    "ArxivAdapter", "LobstersAdapter", "HackerNewsAdapter",
+    "GitHubAdapter", "ProductHuntAdapter", "HuggingFaceAdapter",
+    "BlueskyAdapter",
+]

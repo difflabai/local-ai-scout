@@ -23,17 +23,15 @@ class HackerNewsAdapter(SourceAdapter):
 
     def fetch(self, topic: str, lookback_hours: int = 24, max_results: int = 100,
               queries: list[str] | None = None) -> list[Post]:
+        search_terms = self._build_search_terms(topic, queries)
         cutoff = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
         cutoff_ts = int(cutoff.timestamp())
 
-        if not queries:
-            queries = [t.strip() for t in topic.split(",") if t.strip()] or [topic]
-
-        seen_ids: set[str] = set()
+        seen_urls: set[str] = set()
         posts: list[Post] = []
 
-        for i, query in enumerate(queries, 1):
-            print(f"  [hn {i}/{len(queries)}] {query[:60]}...", file=sys.stderr)
+        for i, query in enumerate(search_terms, 1):
+            print(f"  [{i}/{len(search_terms)}] HN: {query[:60]}...", file=sys.stderr)
 
             # Search by relevance (stories)
             story_hits = self._search(query, cutoff_ts, tags="story", endpoint="search")
@@ -44,23 +42,27 @@ class HackerNewsAdapter(SourceAdapter):
                                         endpoint="search", hits_per_page=50)
 
             for hit in story_hits + recent_hits:
-                oid = hit.get("objectID", "")
-                if oid and oid not in seen_ids:
-                    post = self._hit_to_post(hit)
-                    if post:
-                        seen_ids.add(oid)
-                        posts.append(post)
+                post = self._hit_to_post(hit)
+                if post and post.url not in seen_urls:
+                    seen_urls.add(post.url)
+                    posts.append(post)
 
             for hit in comment_hits:
-                oid = f"comment-{hit.get('objectID', '')}"
-                if oid and oid not in seen_ids:
-                    post = self._comment_to_post(hit)
-                    if post:
-                        seen_ids.add(oid)
-                        posts.append(post)
+                post = self._comment_to_post(hit)
+                if post and post.url not in seen_urls:
+                    seen_urls.add(post.url)
+                    posts.append(post)
 
-        print(f"  -> {len(posts)} posts from HackerNews", file=sys.stderr)
-        return posts[:max_results]
+        print(f"  -> {len(posts)} HN posts across {len(search_terms)} queries", file=sys.stderr)
+        return posts
+
+    def _build_search_terms(self, topic: str, queries: list[str] | None) -> list[str]:
+        if queries:
+            return queries
+        terms = [t.strip() for t in topic.split(",") if t.strip()]
+        if not terms:
+            terms = [topic]
+        return terms
 
     @staticmethod
     def _search(query: str, cutoff_ts: int, tags: str = "story",
@@ -100,15 +102,16 @@ class HackerNewsAdapter(SourceAdapter):
         if created_at_i:
             timestamp = datetime.fromtimestamp(created_at_i, tz=timezone.utc).isoformat()
 
+        text = f"{title}\n\n{body}".strip() if body else title
+
         return Post(
             source="hackernews",
             author=author,
-            text=f"{title}\n{body}".strip() if body else title,
+            text=text,
             url=f"https://news.ycombinator.com/item?id={object_id}",
             timestamp=timestamp,
             score=points,
             metadata={
-                "title": title,
                 "num_comments": num_comments,
                 "story_url": hit.get("url", ""),
             },
@@ -122,7 +125,6 @@ class HackerNewsAdapter(SourceAdapter):
 
         comment_text = hit.get("comment_text") or ""
         author = hit.get("author", "")
-        story_id = hit.get("story_id")
         story_title = hit.get("story_title") or ""
         created_at_i = hit.get("created_at_i")
 
@@ -130,16 +132,18 @@ class HackerNewsAdapter(SourceAdapter):
         if created_at_i:
             timestamp = datetime.fromtimestamp(created_at_i, tz=timezone.utc).isoformat()
 
+        title = f"[Comment on: {story_title}]" if story_title else "[Comment]"
+        text = f"{title}\n\n{comment_text}".strip() if comment_text else title
+
         return Post(
             source="hackernews",
             author=author,
-            text=f"[Comment on: {story_title}]\n{comment_text}" if story_title else comment_text,
+            text=text,
             url=f"https://news.ycombinator.com/item?id={object_id}",
             timestamp=timestamp,
             score=hit.get("points") or 0,
             metadata={
                 "type": "comment",
-                "story_id": str(story_id) if story_id else "",
                 "story_title": story_title,
             },
         )

@@ -2,21 +2,13 @@
 """
 xscout — Multi-Source AI Intel Pipeline
 
-<<<<<<< HEAD
-Pulls posts from X, Reddit, CivitAI, Product Hunt, and other sources → sends to NanoGPT LLM API → outputs intel brief.
-=======
 Pulls posts from X, Reddit, CivitAI, HackerNews, and other sources → sends to NanoGPT LLM API → outputs intel brief.
->>>>>>> main
 
 Usage:
   python3 scout.py                                        # X source (default)
   python3 scout.py --source reddit --topic "SDXL"         # Reddit source
   python3 scout.py --source civitai --topic "SDXL"        # CivitAI models
-<<<<<<< HEAD
-  python3 scout.py --source producthunt --topic "AI"      # Product Hunt launches
-=======
   python3 scout.py --source hackernews --topic "LLMs"     # HackerNews
->>>>>>> main
   python3 scout.py --source all --topic "local LLMs"      # All sources
   python3 scout.py --save                                 # Save brief to briefs/
   python3 scout.py --from-file posts.json                 # Replay from saved data
@@ -136,8 +128,9 @@ def main():
         help="Raw X API query strings (bypass query builder entirely)",
     )
     parser.add_argument(
-        "--source", default="x", choices=["x", "reddit", "civitai", "arxiv", "lobsters", "hackernews", "github", "producthunt", "all"],
-        help="Source to pull from: x, reddit, civitai, arxiv, lobsters, hackernews, github, producthunt, or all (default: x)",
+        "--source", default="x",
+        choices=["x", "reddit", "civitai", "hackernews", "arxiv", "github", "lobsters", "producthunt", "huggingface", "bluesky", "all"],
+        help="Source to pull from (default: x)",
     )
     args = parser.parse_args()
 
