@@ -1,71 +1,91 @@
 #!/usr/bin/env python3
 """
-xscout — Multi-Source AI Intel Scout
+xscout — Multi-Source AI Intel Pipeline
 
-Pulls posts from X, HackerNews (and more) → sends to LLM via NanoGPT → outputs intel brief.
+Pulls posts from X, Reddit, CivitAI, HackerNews, and other sources → sends to NanoGPT LLM API → outputs intel brief.
 
 Usage:
-  python3 scout.py                                      # twitter (default)
-  python3 scout.py --source hackernews --topic "LLMs"   # HackerNews
-  python3 scout.py --source all --topic "robotics"      # all sources
-  python3 scout.py --save                               # save to briefs/
-  python3 scout.py --from-file posts.json               # replay saved data
+  python3 scout.py                                        # X source (default)
+  python3 scout.py --source reddit --topic "SDXL"         # Reddit source
+  python3 scout.py --source civitai --topic "SDXL"        # CivitAI models
+  python3 scout.py --source hackernews --topic "LLMs"     # HackerNews
+  python3 scout.py --source all --topic "local LLMs"      # All sources
+  python3 scout.py --save                                 # Save brief to briefs/
+  python3 scout.py --from-file posts.json                 # Replay from saved data
 
 Required env vars:
   NANOGPT_API_KEY     — NanoGPT API key
 
 Source-specific env vars:
-  X_BEARER_TOKEN      — X API bearer token (for twitter source)
+  X_BEARER_TOKEN      — X API bearer token (or X_CONSUMER_KEY + X_API_KEY)
 """
 
+import json
 import os
 import sys
-import json
 import argparse
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 from config import (
-    DEFAULT_QUERIES, LOOKBACK_HOURS,
+    DEFAULT_QUERIES, LOOKBACK_HOURS, MAX_RESULTS_PER_QUERY,
     LLM_MODEL, MAX_TOKENS, SCOUT_FOCUS,
 )
 from prompt import build_system_prompt
 from queries import build_topic_queries
-from sources import TwitterSource, HackerNewsSource
+from sources import ADAPTERS, Post
 
 
-# ─── SOURCE REGISTRY ────────────────────────────────────────────────────────
+# ─── FETCH POSTS ─────────────────────────────────────────────────────────────
 
-SOURCE_MAP = {
-    "twitter": TwitterSource,
-    "x": TwitterSource,
-    "hackernews": HackerNewsSource,
-    "hn": HackerNewsSource,
-}
+def fetch_posts(source_names: list[str], topic: str, queries: list[str] | None) -> list[Post]:
+    """Fetch posts from one or more source adapters."""
+    all_posts: list[Post] = []
 
-ALL_SOURCES = [TwitterSource, HackerNewsSource]
+    for name in source_names:
+        adapter_cls = ADAPTERS.get(name)
+        if not adapter_cls:
+            print(f"❌ Unknown source: {name!r}. Available: {', '.join(ADAPTERS)}", file=sys.stderr)
+            sys.exit(1)
 
-VALID_SOURCE_NAMES = sorted(set(SOURCE_MAP.keys()) | {"all"})
+        adapter = adapter_cls()
+        # Only pass raw queries to X adapter (Reddit uses topic directly)
+        adapter_queries = queries if name == "x" else None
+        try:
+            posts = adapter.fetch(
+                topic=topic,
+                lookback_hours=LOOKBACK_HOURS,
+                max_results=MAX_RESULTS_PER_QUERY,
+                queries=adapter_queries,
+            )
+            all_posts.extend(posts)
+        except Exception as e:
+            print(f"⚠ {name} source failed: {e}", file=sys.stderr)
+
+    return all_posts
 
 
-def _build_plain_queries(topic: str) -> list[str]:
-    """Build simple keyword queries from a topic string (for non-Twitter sources).
-
-    Splits comma-separated topic into individual search terms.
-    """
-    terms = [t.strip() for t in topic.split(",") if t.strip()]
-    return terms if terms else [topic]
+def posts_to_json(posts: list[Post], topic: str) -> str:
+    """Serialize posts to JSON for the LLM."""
+    data = {
+        "pulled_at": datetime.now().isoformat(),
+        "topic": topic,
+        "total_posts": len(posts),
+        "posts": [asdict(p) for p in posts],
+    }
+    return json.dumps(data, indent=2)
 
 
 # ─── GENERATE BRIEF ─────────────────────────────────────────────────────────
 
 def generate_brief(posts_json: str, system_prompt: str) -> str:
-    from urllib.request import Request, urlopen
-
     api_key = os.environ.get("NANOGPT_API_KEY", "")
     if not api_key:
         print("❌ NANOGPT_API_KEY not set", file=sys.stderr)
         sys.exit(1)
+
+    from urllib.request import Request, urlopen
 
     body = json.dumps({
         "model": LLM_MODEL,
@@ -94,22 +114,22 @@ def generate_brief(posts_json: str, system_prompt: str) -> str:
 # ─── MAIN ────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="xscout — Multi-Source AI Intel Scout")
+    parser = argparse.ArgumentParser(description="xscout — Multi-Source AI Intel Pipeline")
     parser.add_argument("--save", action="store_true", help="Save brief to briefs/ directory")
-    parser.add_argument("--save-tweets", action="store_true", help="Also save raw post data JSON")
-    parser.add_argument("--from-file", help="Use saved JSON instead of fetching fresh")
+    parser.add_argument("--save-posts", action="store_true", help="Also save raw posts JSON")
+    parser.add_argument("--save-tweets", action="store_true", help="Alias for --save-posts (backwards compat)")
+    parser.add_argument("--from-file", help="Use saved JSON instead of pulling fresh")
     parser.add_argument(
         "--topic", default="",
         help="Topic/domain to scout (default: local AI). Also via SCOUT_FOCUS env var",
     )
     parser.add_argument(
         "--queries", nargs="+", default=None,
-        help="Raw query strings (bypass query builder entirely)",
+        help="Raw X API query strings (bypass query builder entirely)",
     )
     parser.add_argument(
-        "--source", default="twitter",
-        choices=VALID_SOURCE_NAMES,
-        help="Source to pull from: twitter, hackernews (hn), or all (default: twitter)",
+        "--source", default="x", choices=["x", "reddit", "civitai", "arxiv", "lobsters", "hackernews", "all"],
+        help="Source to pull from: x, reddit, civitai, arxiv, lobsters, hackernews, or all (default: x)",
     )
     args = parser.parse_args()
 
@@ -121,48 +141,33 @@ def main():
     else:
         system_prompt = build_system_prompt()
 
+    # Resolve queries: --queries flag > topic builder > defaults (X only)
+    if args.queries:
+        queries = args.queries
+        print(f"🔎 Using {len(queries)} raw quer{'y' if len(queries)==1 else 'ies'}", file=sys.stderr)
+    elif topic:
+        queries = build_topic_queries(topic)
+    else:
+        queries = DEFAULT_QUERIES
+
+    # Resolve source list
+    if args.source == "all":
+        source_names = list(ADAPTERS.keys())
+    else:
+        source_names = [args.source]
+
     # Step 1: Get posts
     if args.from_file:
         print(f"📂 Loading {args.from_file}", file=sys.stderr)
         posts_json = Path(args.from_file).read_text()
     else:
-        # Determine which sources to use
-        if args.source == "all":
-            adapters = [cls() for cls in ALL_SOURCES]
-        else:
-            adapter_cls = SOURCE_MAP.get(args.source)
-            if not adapter_cls:
-                print(f"❌ Unknown source: {args.source}", file=sys.stderr)
-                sys.exit(1)
-            adapters = [adapter_cls()]
-
-        all_posts = []
-        for adapter in adapters:
-            print(f"📡 Pulling from {adapter.name}...", file=sys.stderr)
-
-            # Build queries appropriate for this source
-            if args.queries:
-                queries = args.queries
-                print(f"🔎 Using {len(queries)} raw quer{'y' if len(queries)==1 else 'ies'}",
-                      file=sys.stderr)
-            elif adapter.name == "twitter":
-                queries = build_topic_queries(topic) if topic else DEFAULT_QUERIES
-            else:
-                # Non-Twitter sources use plain keyword queries
-                queries = _build_plain_queries(topic) if topic else DEFAULT_QUERIES
-
-            posts = adapter.fetch(queries, LOOKBACK_HOURS)
-            all_posts.extend(posts)
-
-        # Serialize to JSON for the LLM
-        posts_data = {
-            "pulled_at": datetime.now().isoformat(),
-            "lookback_hours": LOOKBACK_HOURS,
-            "sources": [a.name for a in adapters],
-            "total_posts": len(all_posts),
-            "posts": [p.to_dict() for p in all_posts],
-        }
-        posts_json = json.dumps(posts_data, indent=2)
+        print(f"📡 Pulling from: {', '.join(source_names)}", file=sys.stderr)
+        posts = fetch_posts(source_names, topic or "local AI", queries)
+        if not posts:
+            print("⚠ No posts found from any source.", file=sys.stderr)
+        posts_json = posts_to_json(posts, topic or "local AI")
+        total = len(posts)
+        print(f"  ✅ {total} total posts", file=sys.stderr)
 
     # Step 2: Generate brief
     brief = generate_brief(posts_json, system_prompt)
@@ -170,7 +175,8 @@ def main():
     # Step 3: Output
     print(brief)
 
-    if args.save or args.save_tweets:
+    save_posts = args.save_posts or args.save_tweets
+    if args.save or save_posts:
         briefs_dir = Path(__file__).parent / "briefs"
         briefs_dir.mkdir(exist_ok=True)
         date_str = datetime.now().strftime("%Y-%m-%d")
@@ -180,10 +186,10 @@ def main():
             brief_path.write_text(brief)
             print(f"  💾 Brief → {brief_path}", file=sys.stderr)
 
-        if args.save_tweets:
-            tweets_path = briefs_dir / f"{date_str}-posts.json"
-            tweets_path.write_text(posts_json)
-            print(f"  💾 Posts → {tweets_path}", file=sys.stderr)
+        if save_posts:
+            posts_path = briefs_dir / f"{date_str}-posts.json"
+            posts_path.write_text(posts_json)
+            print(f"  💾 Posts → {posts_path}", file=sys.stderr)
 
     print("✅ Done.", file=sys.stderr)
 

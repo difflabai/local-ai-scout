@@ -1,40 +1,27 @@
-"""Base classes for xscout source adapters."""
-
-from dataclasses import dataclass, field, asdict
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 
 @dataclass
 class Post:
     """Normalized post from any source."""
-    source: str              # e.g. "twitter", "hackernews", "reddit"
-    id: str                  # unique ID within source
-    title: str               # post title (empty for tweets)
-    body: str                # post body / tweet text
-    url: str                 # permalink to original
-    author: str              # username / handle
-    score: int = 0           # likes, points, upvotes
-    created_at: str = ""     # ISO 8601
-    metadata: dict = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return asdict(self)
+    source: str        # "x", "reddit", "hackernews", "civitai"
+    author: str
+    text: str
+    url: str           # direct link to original post
+    timestamp: str     # ISO 8601
+    score: int = 0     # upvotes, likes, etc.
+    metadata: dict = field(default_factory=dict)  # source-specific extras
 
 
 class SourceAdapter(ABC):
-    """Abstract base for source adapters."""
-
-    name: str = ""
-
     @abstractmethod
-    def fetch(self, queries: list[str], lookback_hours: int) -> list[Post]:
-        """Fetch posts matching the given queries within the lookback window.
+    def fetch(self, topic: str, lookback_hours: int = 24, max_results: int = 100,
+              queries: list[str] | None = None) -> list[Post]:
+        """Fetch posts about a topic. Returns normalized Post objects."""
+        ...
 
-        Args:
-            queries: Search query strings (interpreted per-source).
-            lookback_hours: How far back to search.
-
-        Returns:
-            List of normalized Post objects.
-        """
+    @property
+    @abstractmethod
+    def name(self) -> str:
         ...
