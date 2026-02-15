@@ -2,7 +2,7 @@
 
 ## What this project does
 
-xscout — multi-source AI intel pipeline. Pulls posts from X (Twitter), Reddit, CivitAI, and other platforms, sends them to an LLM via NanoGPT, and generates a structured intel brief.
+xscout — multi-source AI intel pipeline. Pulls posts from X (Twitter), Reddit, CivitAI, Arxiv, Lobsters, HackerNews, and other platforms, sends them to an LLM via NanoGPT, and generates a structured intel brief.
 
 ## How to run
 
@@ -18,6 +18,9 @@ python3 scout.py --source reddit --topic "SDXL, stable diffusion"
 
 # CivitAI source
 python3 scout.py --source civitai --topic "SDXL lora"
+
+# HackerNews (no API key needed)
+python3 scout.py --source hackernews --topic "local AI, LLMs"
 
 # All sources combined
 python3 scout.py --source all --topic "local LLMs"
@@ -50,6 +53,9 @@ python3 scout.py --from-file briefs/2026-02-14-posts.json
   - `x.py` — X/Twitter adapter (API v2 recent search)
   - `reddit.py` — Reddit adapter (public JSON API, no auth)
   - `civitai.py` — CivitAI adapter (public REST API, no auth)
+  - `arxiv.py` — Arxiv adapter
+  - `lobsters.py` — Lobsters adapter
+  - `hackernews.py` — HackerNews adapter (Algolia API, no auth)
 - `config.py` — Search queries, lookback window, model settings
 - `prompt.py` — System prompt for the LLM call
 - `queries.py` — X API query builder from freeform topics
